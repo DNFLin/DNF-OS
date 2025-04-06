@@ -202,7 +202,28 @@ void setup_on_boot() {
     }
 }
 
+#include "custom_network_stack.h"
+
 int main() {
-    setup_on_boot();
+    // Initialize the network interface
+    custom_initialize_interface("eth0", "192.168.1.100", "255.255.255.0", "192.168.1.1");
+
+    // Configure DNS servers
+    custom_configure_dns("1.1.1.1", "1.0.0.1");
+
+    // Resolve a hostname
+    char resolved_ip[INET_ADDRSTRLEN];
+    if (custom_resolve_hostname("google.com", resolved_ip, sizeof(resolved_ip)) == 0) {
+        printf("Resolved IP: %s\n", resolved_ip);
+    } else {
+        printf("Failed to resolve hostname.\n");
+    }
+
+    // Start a TCP server
+    custom_start_server("TCP", 8080);
+
+    // Start a UDP server
+    custom_start_server("UDP", 9090);
+
     return 0;
 }
