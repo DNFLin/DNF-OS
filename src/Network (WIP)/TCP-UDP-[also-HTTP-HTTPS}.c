@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
+#include "custom_network_stack.h"
 
 void configure_network(const char *interface, const char *ip_address, const char *netmask, const char *gateway) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -176,48 +177,28 @@ void tcp_udp_server(const char *protocol, int port) {
     close(sockfd);
 }
 
+#include "custom_network_stack.h"
+
 void setup_on_boot() {
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("Failed to fork process");
-        exit(EXIT_FAILURE);
-    } else if (pid > 0) {
-        // parent process exits
-        exit(EXIT_SUCCESS);
-    }
-
-    // child process continues
-    if (setsid() < 0) {
-        perror("Failed to create new session");
-        exit(EXIT_FAILURE);
-    }
-
-    // redirect file descriptors to /dev/null
-    int fd = open("/dev/null", O_RDWR);
-    if (fd < 0) {
-        perror("Failed to open /dev/null");
-        exit(EXIT_FAILURE);
-    }
-    dup2(fd, STDIN_FILENO);
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    if (fd > STDERR_FILENO) {
-        close(fd);
-    }
-
     const char *interface = "eth0";
     const char *ip_address = "192.168.1.100";
     const char *netmask = "255.255.255.0";
     const char *gateway = "192.168.1.1";
 
-    configure_network(interface, ip_address, netmask, gateway);
-    configure_dns(); // set DNS servers
+    // use custom network stack functions
+    custom_initialize_interface(interface, ip_address, netmask, gateway);
+    custom_configure_dns("1.1.1.1", "1.0.0.1");
 
     const char *hostname = "example.com";
-    query_dns(hostname);
+    char resolved_ip[INET_ADDRSTRLEN];
+    if (custom_resolve_hostname(hostname, resolved_ip, sizeof(resolved_ip)) == 0) {
+        printf("Resolved %s to %s\n", hostname, resolved_ip);
+    } else {
+        printf("Failed to resolve hostname: %s\n", hostname);
+    }
 
-    tcp_udp_server("TCP", 8080);
-    tcp_udp_server("UDP", 8080);
+    custom_start_server("TCP", 8080);
+    custom_start_server("UDP", 8080);
 
     while (1) {
         sleep(60); // keep the process running
