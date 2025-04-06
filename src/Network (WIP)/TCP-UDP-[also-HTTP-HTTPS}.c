@@ -17,6 +17,7 @@
 #include <errno.h>
 #include "custom_network_stack.h"
 
+// Configure the network interface
 void configure_network(const char *interface, const char *ip_address, const char *netmask, const char *gateway) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -28,7 +29,7 @@ void configure_network(const char *interface, const char *ip_address, const char
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
 
-    // set IP address
+    // Set IP address
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
     addr->sin_family = AF_INET;
     if (inet_pton(AF_INET, ip_address, &addr->sin_addr) <= 0) {
@@ -42,7 +43,7 @@ void configure_network(const char *interface, const char *ip_address, const char
         exit(EXIT_FAILURE);
     }
 
-    // set netmask
+    // Set netmask
     if (inet_pton(AF_INET, netmask, &addr->sin_addr) <= 0) {
         perror("Invalid netmask");
         close(sockfd);
@@ -54,7 +55,7 @@ void configure_network(const char *interface, const char *ip_address, const char
         exit(EXIT_FAILURE);
     }
 
-    // bring interface up
+    // Bring interface up
     if (ioctl(sockfd, SIOCGIFFLAGS, &ifr) < 0) {
         perror("Failed to get interface flags");
         close(sockfd);
@@ -67,7 +68,7 @@ void configure_network(const char *interface, const char *ip_address, const char
         exit(EXIT_FAILURE);
     }
 
-    // set default gateway
+    // Set default gateway
     struct rtentry route;
     memset(&route, 0, sizeof(route));
     struct sockaddr_in *gw = (struct sockaddr_in *)&route.rt_gateway;
@@ -100,6 +101,7 @@ void configure_network(const char *interface, const char *ip_address, const char
     close(sockfd);
 }
 
+// Configure DNS servers
 void configure_dns() {
     FILE *resolv = fopen("/etc/resolv.conf", "w");
     if (!resolv) {
@@ -114,6 +116,7 @@ void configure_dns() {
     printf("DNS servers configured: 1.1.1.1, 1.0.0.1\n");
 }
 
+// Resolve any hostname to an IP address
 void query_dns(const char *hostname) {
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
@@ -122,7 +125,7 @@ void query_dns(const char *hostname) {
 
     int status = getaddrinfo(hostname, NULL, &hints, &res);
     if (status != 0) {
-        fprintf(stderr, "DNS resolution failed: %s\n", gai_strerror(status));
+        fprintf(stderr, "DNS resolution failed for %s: %s\n", hostname, gai_strerror(status));
         return;
     }
 
@@ -134,6 +137,7 @@ void query_dns(const char *hostname) {
     freeaddrinfo(res);
 }
 
+// Start a TCP or UDP server
 void tcp_udp_server(const char *protocol, int port) {
     int sockfd;
     struct sockaddr_in server_addr;
@@ -177,31 +181,24 @@ void tcp_udp_server(const char *protocol, int port) {
     close(sockfd);
 }
 
-#include "custom_network_stack.h"
-
+// Main setup function
 void setup_on_boot() {
     const char *interface = "eth0";
     const char *ip_address = "192.168.1.100";
     const char *netmask = "255.255.255.0";
     const char *gateway = "192.168.1.1";
 
-    // use custom network stack functions
-    custom_initialize_interface(interface, ip_address, netmask, gateway);
-    custom_configure_dns("1.1.1.1", "1.0.0.1");
+    configure_network(interface, ip_address, netmask, gateway);
+    configure_dns();
 
     const char *hostname = "example.com";
-    char resolved_ip[INET_ADDRSTRLEN];
-    if (custom_resolve_hostname(hostname, resolved_ip, sizeof(resolved_ip)) == 0) {
-        printf("Resolved %s to %s\n", hostname, resolved_ip);
-    } else {
-        printf("Failed to resolve hostname: %s\n", hostname);
-    }
+    query_dns(hostname);
 
-    custom_start_server("TCP", 8080);
-    custom_start_server("UDP", 8080);
+    tcp_udp_server("TCP", 8080);
+    tcp_udp_server("UDP", 8080);
 
     while (1) {
-        sleep(60); // keep the process running
+        sleep(60); // Keep the process running
     }
 }
 
