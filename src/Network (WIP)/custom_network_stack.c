@@ -1,3 +1,4 @@
+#include "custom_network_stack.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,6 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <netdb.h>
 
 // Custom function to initialize a network interface
 int custom_initialize_interface(const char *interface, const char *ip_address, const char *netmask, const char *gateway) {
