@@ -8,18 +8,6 @@
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
-#include <netdb.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/ip.h>
-#include <netinet/udp.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <sys/types.h>
@@ -39,10 +27,14 @@ void configure_network(const char *interface, const char *ip_address, const char
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
 
-    // set/grab IP address
+    // set IP address
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
     addr->sin_family = AF_INET;
-    inet_pton(AF_INET, ip_address, &addr->sin_addr);
+    if (inet_pton(AF_INET, ip_address, &addr->sin_addr) <= 0) {
+        perror("Invalid IP address");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
     if (ioctl(sockfd, SIOCSIFADDR, &ifr) < 0) {
         perror("Failed to set IP address");
         close(sockfd);
@@ -50,14 +42,18 @@ void configure_network(const char *interface, const char *ip_address, const char
     }
 
     // set netmask
-    inet_pton(AF_INET, netmask, &addr->sin_addr);
+    if (inet_pton(AF_INET, netmask, &addr->sin_addr) <= 0) {
+        perror("Invalid netmask");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
     if (ioctl(sockfd, SIOCSIFNETMASK, &ifr) < 0) {
         perror("Failed to set netmask");
         close(sockfd);
         exit(EXIT_FAILURE);
     }
 
-    // show the interface
+    // bring interface up
     if (ioctl(sockfd, SIOCGIFFLAGS, &ifr) < 0) {
         perror("Failed to get interface flags");
         close(sockfd);
@@ -78,7 +74,11 @@ void configure_network(const char *interface, const char *ip_address, const char
     struct sockaddr_in *mask = (struct sockaddr_in *)&route.rt_genmask;
 
     gw->sin_family = AF_INET;
-    inet_pton(AF_INET, gateway, &gw->sin_addr);
+    if (inet_pton(AF_INET, gateway, &gw->sin_addr) <= 0) {
+        perror("Invalid gateway");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
 
     dst->sin_family = AF_INET;
     dst->sin_addr.s_addr = INADDR_ANY;
@@ -99,14 +99,29 @@ void configure_network(const char *interface, const char *ip_address, const char
     close(sockfd);
 }
 
+void configure_dns() {
+    FILE *resolv = fopen("/etc/resolv.conf", "w");
+    if (!resolv) {
+        perror("Failed to open /etc/resolv.conf");
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(resolv, "nameserver 1.1.1.1\n");
+    fprintf(resolv, "nameserver 1.0.0.1\n");
+    fclose(resolv);
+
+    printf("DNS servers configured: 1.1.1.1, 1.0.0.1\n");
+}
+
 void query_dns(const char *hostname) {
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET; // IPv4
     hints.ai_socktype = SOCK_STREAM;
 
-    if (getaddrinfo(hostname, NULL, &hints, &res) != 0) {
-        perror("DNS resolution failed");
+    int status = getaddrinfo(hostname, NULL, &hints, &res);
+    if (status != 0) {
+        fprintf(stderr, "DNS resolution failed: %s\n", gai_strerror(status));
         return;
     }
 
