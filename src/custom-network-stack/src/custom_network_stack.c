@@ -13,7 +13,7 @@
 #include <net/if.h>
 #include <errno.h>
 
-// Enables NIC 
+// Enables services. This includes basic error checking along with DHCP culling.
 void custom_initialize_interface(const char *interface, const char *ip_address, const char *netmask, const char *gateway) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -25,7 +25,7 @@ void custom_initialize_interface(const char *interface, const char *ip_address, 
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
 
-    // Set IP address
+    // Set IP address/Error Checking.
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
     addr->sin_family = AF_INET;
     if (inet_pton(AF_INET, ip_address, &addr->sin_addr) <= 0) {
@@ -39,7 +39,7 @@ void custom_initialize_interface(const char *interface, const char *ip_address, 
         exit(EXIT_FAILURE);
     }
 
-    // Set netmask
+    // Set netmask with basic error checking. If netmask is less or equal to 0 then close sockfd and cause exit. 
     if (inet_pton(AF_INET, netmask, &addr->sin_addr) <= 0) {
         perror("Invalid netmask");
         close(sockfd);
@@ -67,6 +67,7 @@ void custom_initialize_interface(const char *interface, const char *ip_address, 
     close(sockfd);
 }
 
+// DNS Config file checking. If this throws an error, you have likely chown'd the file. Create an error request on github so that we can help you fix it.
 void custom_configure_dns(const char *primary_dns, const char *secondary_dns) {
     const char *dns_config_file = "/path/to/your/custom/dns/config";
 
@@ -83,6 +84,7 @@ void custom_configure_dns(const char *primary_dns, const char *secondary_dns) {
     printf("DNS servers configured: %s, %s\n", primary_dns, secondary_dns);
 }
 
+// DNS resolving (IPv4) and DNS error checking.
 int custom_resolve_hostname(const char *hostname, char *resolved_ip, size_t ip_size) {
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
@@ -109,11 +111,12 @@ void custom_start_server(const char *protocol, int port) {
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
     } else if (strcmp(protocol, "UDP") == 0) {
         sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    } else {
+    } else { // If network protocol is not TCP/UDP then print "Unsupported protocol: PROTOCOL_NAME" in logs. I'm not currently aware of anything other than TCP/UDP (off the top of my head). Create an error on the github page if something needs to be corrected.
         fprintf(stderr, "Unsupported protocol: %s\n", protocol);
         return;
     }
 
+    // If socket count = 0 then throw error via perror.
     if (sockfd < 0) {
         perror("Socket creation failed");
         return;
@@ -124,6 +127,7 @@ void custom_start_server(const char *protocol, int port) {
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
 
+    // If server_addr = less than 0, 
     if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
         close(sockfd);
@@ -144,6 +148,7 @@ void custom_start_server(const char *protocol, int port) {
     close(sockfd);
 }
 
+    // If socket creation fails, throw an error via EXIT_FAILURE. --SOCK CHECK--
 void send_dns_query(const char *hostname, const char *dns_server) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -154,7 +159,7 @@ void send_dns_query(const char *hostname, const char *dns_server) {
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(53); // DNS port
+    server_addr.sin_port = htons(53); // DNS port; feel free to change. Will add a command/cfg file for that specifically.
     inet_pton(AF_INET, dns_server, &server_addr.sin_addr);
 
     unsigned char query[256];
@@ -183,6 +188,7 @@ void send_dns_query(const char *hostname, const char *dns_server) {
         exit(EXIT_FAILURE);
     }
 
+    // Sets unsigned int/char to 512 value. Also checks for DNS healthcheck.
     unsigned char response[512];
     socklen_t addr_len = sizeof(server_addr);
     if (recvfrom(sockfd, response, sizeof(response), 0, (struct sockaddr *)&server_addr, &addr_len) < 0) {
@@ -190,7 +196,7 @@ void send_dns_query(const char *hostname, const char *dns_server) {
         close(sockfd);
         exit(EXIT_FAILURE);
     }
-
+    // Upon DNS Healthcheck = healthy, child quits.
     printf("DNS response received\n");
     close(sockfd);
 }
