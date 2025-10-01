@@ -164,17 +164,17 @@ void send_dns_query(const char *hostname, const char *dns_server) {
 
     unsigned char query[256];
     memset(query, 0, sizeof(query));
-    query[0] = 0x12; 
+    query[0] = 0x12; // First bytes of DNS header
     query[1] = 0x34;
     query[2] = 0x01; 
     query[5] = 0x01; 
-    char *qname = (char *)&query[12];
-    const char *label = hostname;
+    char *qname = (char *)&query[12]; // DNS question pointer (QNAME), 12 bytes
+    const char *label = hostname; // Pointer for hostname to be encoded in DNS label format
     while (*label) {
         const char *dot = strchr(label, '.');
         if (!dot) dot = label + strlen(label);
         *qname++ = dot - label;
-        memcpy(qname, label, dot - label);
+        memcpy(qname, label, dot - label); // Copy label after length byte
         qname += dot - label;
         label = (*dot) ? dot + 1 : dot;
     }
